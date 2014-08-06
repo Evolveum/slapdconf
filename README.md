@@ -21,9 +21,12 @@ It can reconfigure the sever, create new directory suffixes, setup
 replication, etc.
 
 Examples:
+---------
+```
 slapdconf -h myserver.example.com -D "uid=admin,ou=people,dc=example,dc=com" -w secret get-server-prop
 slapdconf -Y EXTERNAL list-suffixes
 slapdconf -Y EXTERNAL create-suffix dc=example,dc=com --dbDir /var/lib/ldap/dc=example,dc=com --rootPassword supersecret
+```
 
 
 slapdadm
@@ -38,6 +41,8 @@ configuration that is provided by your Linux distribution and that somehow never
 fits. Then a slapdconf tool can be used to replace it with a proper setup.
 
 Examples:
+---------
+```
 slapdadm delete-suffix dc=example,dc=com
 slapdadm delete-all
-
+```
