@@ -46,3 +46,16 @@ Examples:
 slapdadm delete-suffix dc=example,dc=com
 slapdadm delete-all
 ```
+
+Notes
+=====
+
+This is work in progress. Some commands are not yet implemented or implemented partially. Any kind of
+contribution to make these tools a more complete solution is greatly appreciated. The primary source
+code repository for these tools is at Github:
+
+[https://github.com/Evolveum/slapdconf]
+
+The tools are written in Perl. The slapdconf uses Net::LDAP module which is easy to use LDAP client.
+The Perl was chosen because of its flexibility. It also looks like it is kind of a tradition to use
+Perl for LDAP server administration tools.
