@@ -129,6 +129,8 @@ elsif ($command eq "list-databases") { listDatabases() }
 elsif ($command eq "list-suffixes") { listSuffixes() }
 elsif ($command eq "get-suffix-prop") { getSuffixProp() }
 elsif ($command eq "set-suffix-prop") { setSuffixProp() }
+elsif ($command eq "get-suffix-acis") { getSuffixAcis() }
+elsif ($command eq "set-suffix-acis") { setSuffixAcis() }
 elsif ($command eq "get-log-level") { getLogLevel() }
 elsif ($command eq "set-log-level") { setLogLevel() }
 elsif ($command eq "set-tls") { setTls() }
@@ -221,11 +223,8 @@ sub displayProp {
 }
 
 sub getSuffixProp {  
-  my $suffix = shift @ARGV;
-  if (!$suffix) {
-    die("No suffix name specified\n");
-  }
   my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
   
   my $entry = getConfigObjectBySuffix($conn,$suffix,1);
   $entry->dump if $verbose;
@@ -237,12 +236,9 @@ sub getSuffixProp {
 }
 
 sub setSuffixProp {  
-  my $suffix = shift @ARGV;
-  if (!$suffix) {
-    die("No suffix name specified\n");
-  }
-  my @propvals = @ARGV;
   my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my @propvals = @ARGV;
   
   my $entry = getConfigObjectBySuffix($conn,$suffix,1);
   
@@ -257,6 +253,58 @@ sub setSuffixProp {
   ldapDisconnect($conn);  
 }
 
+sub getSuffixAcis {  
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  
+  my $entry = getConfigObjectBySuffix($conn,$suffix,1);
+  $entry->dump if $verbose;
+  my @acis = $entry->get_value('olcAccess');
+  for my $aci (@acis) {
+    $aci =~ s/^{\d+}//;
+    print $aci."\n";
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub setSuffixAcis {  
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my @propvals = @ARGV;
+  
+  my $entry = getConfigObjectBySuffix($conn,$suffix,1);
+  my @acis;
+  while (<>) {
+    chomp;
+    push @acis,$_;
+  }
+  
+  ldapModify($conn,$entry->dn,
+    replace => {
+      olcAccess => \@acis
+    },
+  );
+  
+  ldapDisconnect($conn);  
+}
+
+sub getSuffixArg {
+  my ($conn) = @_;
+
+  my $suffix = shift @ARGV;
+  if (!$suffix) {
+    my @suffixes = getSuffixDns($conn);
+    if (!@suffixes) {
+      die("No suffixes configures\n");
+    }
+    if (scalar(@suffixes) > 1) {
+      die("More than one suffix configured. Please specify suffix name.\nAvailable Suffixes:\n".join("\n",@suffixes));
+    }
+    $suffix = shift @suffixes;
+  }
+  return $suffix;
+}
 
 ######### SUFFIX CREATE AND DELETE
 
@@ -371,15 +419,25 @@ sub listDatabases {
 sub listSuffixes {  
   my $conn = ldapConnectBind();
   
-  my @entries = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcDatabaseConfig");
-  foreach my $entry (@entries) {
-    my $suffix = $entry->get_value("olcSuffix");
-    if ($suffix) {
-      print("$suffix\n");
-    }
+  foreach my $suffix (getSuffixDns($conn)) {
+    print("$suffix\n");
   }
   
   ldapDisconnect($conn);  
+}
+
+sub getSuffixDns {
+  my ($conn) = @_;
+  
+  my @entries = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcDatabaseConfig");
+  my @suffixes;
+  foreach my $entry (@entries) {
+    my $suffix = $entry->get_value("olcSuffix");
+    if ($suffix) {
+      push @suffixes,$suffix;
+    }
+  }
+  return @suffixes;
 }
 
 
