@@ -83,7 +83,7 @@ my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 $SIG{__DIE__} = sub { Carp::confess(@_) };
 
 my $command;
-if ($ARGV[0] !~ /^-/) {
+if (defined $ARGV[0] && $ARGV[0] !~ /^-/) {
   $command = shift;
 }
 
@@ -116,6 +116,10 @@ if (!$hostname && !$port && !$uri) {
   $hostname = "localhost";
 }
 
+if (!$bindDn && !$bindPassword && !$bindSaslMechanism) {
+  $bindSaslMechanism = "EXTERNAL";
+}
+
 print("DEBUG: $command: hostname: $hostname, port: $port\n") if $debug;
 
 if ($command eq "create-suffix") { createSuffix() }
@@ -125,6 +129,8 @@ elsif ($command eq "dump-configuration") { dumpConfiguration() }
 elsif ($command eq "get-server-prop") { getServerProp() }
 elsif ($command eq "set-server-prop") { setServerProp() }
 elsif ($command eq "list-modules") { listModules() }
+elsif ($command eq "add-module") { addModule() }
+elsif ($command eq "delete-module") { deleteModule() }
 elsif ($command eq "list-databases") { listDatabases() }
 elsif ($command eq "list-suffixes") { listSuffixes() }
 elsif ($command eq "get-suffix-prop") { getSuffixProp() }
@@ -449,6 +455,56 @@ sub listModules {
   my ($entry) = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcModuleList");
   foreach my $module ($entry->get_value("olcModuleload")) {
     print "$module\n";
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub addModule {  
+  my $module = shift @ARGV;
+  if (!$module) {
+    die("No module name specified\n");
+  }
+        
+  my $conn = ldapConnectBind();
+  
+  my ($entry) = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcModuleList");
+  
+  if (! grep { $_ =~ /^(\{\d+\})?$module$/ } $entry->get_value("olcModuleload")) {
+  
+    ldapModify($conn,$entry->dn,
+      add => { 'olcModuleload' => [ $module ] },
+    );
+  
+  } else {
+    print "Module $module already active in the server\n";
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub deleteModule {  
+  my $module = shift @ARGV;
+  if (!$module) {
+    die("No module name specified\n");
+  }
+        
+  my $conn = ldapConnectBind();
+  
+  my ($entry) = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcModuleList");
+  
+  my @modids = grep { $_ =~ /^(\{\d+\})?$module$/ } $entry->get_value("olcModuleload");
+  if (! @modids) {
+  
+    print "Module $module not active in the server\n";
+    ldapModify($conn,$entry->dn,
+      add => { 'olcModuleload' => [ $module ] },
+    );
+  
+  } else {
+    ldapModify($conn,$entry->dn,
+      delete => { 'olcModuleload' => \@modids },
+    );    
   }
   
   ldapDisconnect($conn);  
@@ -1107,7 +1163,7 @@ sub dquote {
 sub hashPassword {
   my ($clearPassword) = @_;
   my $salt = generateSalt();
-  my $hash = "{SSHA}".encode_base64(sha1($clearPassword.$salt).$salt);
+  my $hash = "{SSHA}".encode_base64(sha1($clearPassword.$salt).$salt, "");
   return $hash;
 }
 
@@ -1263,6 +1319,14 @@ Dumps a complete server configuration.
 =item B<list-modules>
 
 Lists modules that are enabled on the server.
+
+=item B<add-module> I<modulename>
+
+Adds specified module to server configuration
+
+=item B<delete-module> I<modulename>
+
+Deletes specified module from server configuration. (May not be supported by the server yet)
 
 =item B<list-databases>
 
