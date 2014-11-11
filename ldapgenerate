@@ -41,13 +41,14 @@ my $debug = 0;
 
 # my $defaultTLSCipherSuite = "TLSv1+RSA:!EXPORT:!NULL"; # OpenSSL
 my $defaultTLSCipherSuite = "NORMAL"; # GnuTLS
-my $defaultSuffix = "dc=example,dc=com";
+my $defaultSuffix = "ou=people,dc=example,dc=com";
 my $defaultNamingAttribute="uid";
 my $defaultNameFormat="u%08d";
 my $defaultPasswordFormat="p%08d";
 my $defaultObjectClasses = [ qw(top person organizationalPerson inetOrgPerson) ];
 my $noPersonAttrs = 0;
 my $notReally = 0;
+my $continuous = 0;
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 my @consonants = (qw(b c d f g h j k l m n p r s t v w x z));
 my @vowels = (qw(a e i o u));
@@ -67,6 +68,7 @@ GetOptions (
   "bindPassword|w=s" => \$bindPassword,
   "saslMechanism|Y=s" => \$bindSaslMechanism,
   "notReally|n" => \$notReally,
+  "continuous|c" => \$continuous,
   "verbose|v" => \$verbose,
   "help" => \$optHelp,
   ) or usage();
@@ -97,9 +99,9 @@ print("DEBUG: $numEntries: hostname: $hostname, port: $port\n") if $debug;
 my $conn = ldapConnectBind();
 
 for (my $entryNum = 0; $entryNum < $numEntries; $entryNum++) {
-  print "Adding entry $entryNum\n" if $verbose;
 
   my $name = sprintf($defaultNameFormat, $entryNum);
+  my $readableName;
   my %personAttrs = ();
   if (!$noPersonAttrs) {
     my $sn = randomName();
@@ -112,6 +114,7 @@ for (my $entryNum = 0; $entryNum < $numEntries; $entryNum++) {
       'givenName' => $givenName,
       'userPassword' => hashPassword($password),    
     );
+    $readableName = "$givenName $sn";
   }
   
   my $dn = "$defaultNamingAttribute=$name,$defaultSuffix";
@@ -121,13 +124,26 @@ for (my $entryNum = 0; $entryNum < $numEntries; $entryNum++) {
       %personAttrs,    
   );
 
+  my $entry = Net::LDAP::Entry->new($dn, %entryData);
+
   if (!$notReally) {
-    ldapAdd($conn, $dn,
-      %entryData
-    );
+    if ($verbose) {
+      print "Adding entry $entryNum: $dn"; 
+      print " ($readableName)" if $readableName;
+      print "\n";
+    }
+    my $resp = $conn->add($entry);
+    if ($resp->code) {
+      if ($continuous) {
+        print STDERR "Error adding $dn: ".$resp->error." (".$resp->code.")\n";
+      } else {
+        die("Error adding $dn: ".$resp->error." (".$resp->code.")\n");
+      }
+    }
   } else {
-    print "Would add entry $dn:\n";
-    print Dumper(\%entryData);
+    print "Would add entry:";
+    print $entry->ldif;
+    print "\n";
   }
 
 }
@@ -218,34 +234,6 @@ sub ldapDisconnect {
   }
   
   $conn->disconnect;  
-}
-
-sub ldapAdd {
-  my ($conn,$dn,%attrs) = @_;
-
-  my $entry = Net::LDAP::Entry->new($dn, %attrs);
-  my $resp = $conn->add($entry);
-  if ($resp->code) {
-    die("Error adding $dn: ".$resp->error." (".$resp->code.")\n");
-  }        
-}
-
-sub ldapModify {
-  my ($conn,$dn,%args) = @_;
- 
-  my $resp = $conn->modify($dn,%args);
-  if ($resp->code) {
-    die("Error modyfying $dn: ".$resp->error." (".$resp->code.")\n");
-  }        
-}
-
-sub ldapDelete {
-  my ($conn,$dn) = @_;
- 
-  my $resp = $conn->delete($dn);
-  if ($resp->code) {
-    die("Error deleting $dn: ".$resp->error." (".$resp->code.")\n");
-  }        
 }
 
 ### USAGE and DOCUMENTATION

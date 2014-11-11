@@ -137,6 +137,10 @@ elsif ($command eq "get-suffix-prop") { getSuffixProp() }
 elsif ($command eq "set-suffix-prop") { setSuffixProp() }
 elsif ($command eq "get-suffix-acis") { getSuffixAcis() }
 elsif ($command eq "set-suffix-acis") { setSuffixAcis() }
+elsif ($command eq "list-suffix-overlays") { listSuffixOverlays() }
+elsif ($command eq "add-overlay") { addOverlay() }
+elsif ($command eq "get-overlay-prop") { getOverlayProp() }
+elsif ($command eq "set-overlay-prop") { setOverlayProp() }
 elsif ($command eq "get-log-level") { getLogLevel() }
 elsif ($command eq "set-log-level") { setLogLevel() }
 elsif ($command eq "set-tls") { setTls() }
@@ -311,6 +315,100 @@ sub getSuffixArg {
   }
   return $suffix;
 }
+
+sub listSuffixOverlays {  
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my $sentry = getConfigObjectBySuffix($conn,$suffix,1);
+  
+  my (@entries) = getConfigEntriesByDn($conn,$sentry->dn,"sub","(objectclass=olcOverlayConfig)");
+
+  foreach my $entry (@entries) {
+    my $olcOverlay = $entry->get_value('olcOverlay');
+    my ($objectClass) = grep { $_ ne "olcOverlayConfig" } $entry->get_value('objectClass');
+    print "$olcOverlay ($objectClass)\n";
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub getOverlayProp {
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my $overlayName = shift @ARGV;
+  if (!$overlayName) {
+    die("No overlay name specified\n");
+  }  
+  my $sentry = getConfigObjectBySuffix($conn,$suffix,1);
+  my $oentry = getOverlayEntry($conn,$overlayName,$suffix,$sentry,1);
+  
+  $oentry->dump if $verbose;
+  # Guesswork. TODO: work with schema here
+  
+  foreach my $attr ($oentry->attributes) {
+    if ($attr !~ /^olc/) { next; }
+    if ($attr eq "olcOverlay") { next; }
+    displayProp($oentry,$attr);
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub setOverlayProp {  
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my $overlayName = shift @ARGV;
+  if (!$overlayName) {
+    die("No overlay name specified\n");
+  }
+  my @propvals = @ARGV;
+  
+  my $sentry = getConfigObjectBySuffix($conn,$suffix,1);
+  my $oentry = getOverlayEntry($conn,$overlayName,$suffix,$sentry,1);
+  
+  my %replace = ();
+  my %add = ();
+  parsePropVals(\@propvals, \%replace, \%add);
+  
+  ldapModify($conn,$oentry->dn,
+    replace => \%replace,
+    add => \%add);
+  
+  ldapDisconnect($conn);  
+}
+
+sub addOverlay {  
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  my $overlayName = shift @ARGV;
+  if (!$overlayName) {
+    die("No overlay name specified\n");
+  }
+  my $overlayClass = shift @ARGV;
+  if (!$overlayClass) {
+    die("No overlay objectClass specified\n");
+  }
+  my @propvals = @ARGV;
+  
+  my $sentry = getConfigObjectBySuffix($conn,$suffix,1);
+  my $oentry = getOverlayEntry($conn,$overlayName,$suffix,$sentry,0);
+  if ($oentry) {
+    die("Overlay $overlayName already exists in suffix $suffix\n");
+  }
+  
+  my %replace = ();
+  my %add = ();
+  parsePropVals(\@propvals, \%replace, \%add);
+  
+  ldapAdd($conn, "olcOverlay=$overlayName,".$sentry->dn,
+    'objectClass' => [ 'olcOverlayConfig', $overlayClass ],
+    'olcOverlay' => $overlayName,
+    %replace,
+    %add);
+  
+  ldapDisconnect($conn);  
+}
+
 
 ######### SUFFIX CREATE AND DELETE
 
