@@ -24,6 +24,7 @@ use warnings;
 
 use Net::LDAP;
 use Net::LDAP::LDIF;
+use Net::LDAP::Util qw(ldap_explode_dn);
 use Authen::SASL;
 use Digest::SHA qw(sha1);
 use MIME::Base64;
@@ -41,7 +42,9 @@ my $debug = 0;
 
 # my $defaultTLSCipherSuite = "TLSv1+RSA:!EXPORT:!NULL"; # OpenSSL
 my $defaultTLSCipherSuite = "NORMAL"; # GnuTLS
-my $defaultSuffix = "ou=people,dc=example,dc=com";
+my $suffix = "dc=example,dc=com";
+my $peopleContainer = "ou=people";
+my $groupsContainer = "ou=groups";
 my $defaultNamingAttribute="uid";
 my $defaultNameFormat="u%08d";
 my $defaultPasswordFormat="p%08d";
@@ -49,6 +52,9 @@ my $defaultObjectClasses = [ qw(top person organizationalPerson inetOrgPerson) ]
 my $noPersonAttrs = 0;
 my $notReally = 0;
 my $continuous = 0;
+my $initialize = 0;
+my $quiet = 0;
+my $displayCountAfter = 100;
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 my @consonants = (qw(b c d f g h j k l m n p r s t v w x z));
 my @vowels = (qw(a e i o u));
@@ -67,8 +73,11 @@ GetOptions (
   "bindDn|D=s" => \$bindDn,
   "bindPassword|w=s" => \$bindPassword,
   "saslMechanism|Y=s" => \$bindSaslMechanism,
+  "suffix|s=s" => \$suffix,
+  "init|i" => \$initialize,
   "notReally|n" => \$notReally,
   "continuous|c" => \$continuous,
+  "quiet|q" => \$quiet,
   "verbose|v" => \$verbose,
   "help" => \$optHelp,
   ) or usage();
@@ -78,9 +87,8 @@ if (!defined($numEntries)) {
   $numEntries = shift;
 }
 
-if (!$numEntries) { usage(); }
-if ($numEntries eq "--help") { usage(); }
-
+if (!$numEntries && !$initialize) { usage(); }
+if (defined $numEntries && $numEntries eq "--help") { usage(); }
 
 if (!$hostname && !$port && !$uri) {
   $uri = "ldapi:///";
@@ -96,60 +104,104 @@ if (!$bindDn && !$bindPassword && !$bindSaslMechanism) {
 
 print("DEBUG: $numEntries: hostname: $hostname, port: $port\n") if $debug;
 
-my $conn = ldapConnectBind();
+run();
 
-for (my $entryNum = 0; $entryNum < $numEntries; $entryNum++) {
+sub run {
 
-  my $name = sprintf($defaultNameFormat, $entryNum);
-  my $readableName;
-  my %personAttrs = ();
-  if (!$noPersonAttrs) {
-    my $sn = randomName();
-    my $givenName = randomName();
-    my $cn = sprintf("%s %s (%08d)", $givenName, $sn, $entryNum);
-    my $password = sprintf($defaultPasswordFormat, $entryNum);
-    %personAttrs = (
-      'cn' => $cn,
-      'sn' => $sn,
-      'givenName' => $givenName,
-      'userPassword' => hashPassword($password),    
-    );
-    $readableName = "$givenName $sn";
+  my $conn = ldapConnectBind();
+
+  if ($initialize) {
+    initialize($conn);
   }
+
+  if ($numEntries) {
+    generateEntries($conn);
+  }
+
+  ldapDisconnect($conn);
+}
+
+sub initialize {
+  my ($conn) = @_;
   
-  my $dn = "$defaultNamingAttribute=$name,$defaultSuffix";
-  my %entryData = (
-      'objectClass' => $defaultObjectClasses,
-      $defaultNamingAttribute => $name,
-      %personAttrs,    
+  my $explodedSuffix = ldap_explode_dn($suffix);
+  my $suffixFirst = $explodedSuffix->[0];
+
+  ldapAddSimple($conn, $suffix, "domain");
+  ldapAddSimple($conn, "$peopleContainer,$suffix", "organizationalunit");
+  ldapAddSimple($conn, "$groupsContainer,$suffix", "organizationalunit");  
+}
+
+sub ldapAddSimple {
+  my ($conn, $dn, $objectclass) = @_;
+  my $explodedDn = ldap_explode_dn($dn);
+  ldapAdd($conn, $dn,
+    objectClass => $objectclass,
+    %{$explodedDn->[0]},
   );
+  
+}
 
-  my $entry = Net::LDAP::Entry->new($dn, %entryData);
+sub generateEntries {
+  my ($conn) = @_;
 
-  if (!$notReally) {
+  my $startTime = time();
+  my $entryNum = 0;
+  for (; $entryNum < $numEntries; $entryNum++) {
+
+    my $name = sprintf($defaultNameFormat, $entryNum);
+    my $readableName;
+    my %personAttrs = ();
+    if (!$noPersonAttrs) {
+      my $sn = randomName();
+      my $givenName = randomName();
+      my $cn = sprintf("%s %s (%08d)", $givenName, $sn, $entryNum);
+      my $password = sprintf($defaultPasswordFormat, $entryNum);
+      %personAttrs = (
+        'cn' => $cn,
+        'sn' => $sn,
+        'givenName' => $givenName,
+        'userPassword' => hashPassword($password),    
+      );
+      $readableName = "$givenName $sn";
+    }
+    
+    my $dn = "$defaultNamingAttribute=$name,$peopleContainer,$suffix";
+    my %entryData = (
+        'objectClass' => $defaultObjectClasses,
+        $defaultNamingAttribute => $name,
+        %personAttrs,    
+    );
+
     if ($verbose) {
       print "Adding entry $entryNum: $dn"; 
       print " ($readableName)" if $readableName;
       print "\n";
     }
-    my $resp = $conn->add($entry);
-    if ($resp->code) {
-      if ($continuous) {
-        print STDERR "Error adding $dn: ".$resp->error." (".$resp->code.")\n";
-      } else {
-        die("Error adding $dn: ".$resp->error." (".$resp->code.")\n");
+
+    ldapAdd($conn, $dn, %entryData);
+    
+    if (!$quiet && $entryNum != 0 && ( $entryNum % $displayCountAfter == 0 )) {
+      my $nowTime = time();
+      my $durSec = $nowTime - $startTime;
+      my $etaSec = ($durSec*($numEntries-$entryNum))/$entryNum;
+      my $rate = "INF";
+      if ($durSec != 0) {
+         $rate = $entryNum/$durSec;
       }
+      my $etaEnd = localtime($startTime + $etaSec);
+      print "Added $entryNum entries in $durSec seconds ($rate entries per second). ETA in $etaSec sec ($etaEnd)\n";
     }
-  } else {
-    print "Would add entry:";
-    print $entry->ldif;
-    print "\n";
   }
-
+  
+  my $stopTime = time();
+  my $durSec = $stopTime - $startTime;
+  if (!$quiet) {
+    my $rate = $entryNum/$durSec;
+    print "Added $entryNum entries in $durSec seconds ($rate entries per second).\n";
+  }
+  
 }
-
-ldapDisconnect($conn);
-
 
 ##### UTIL functions
 
@@ -223,6 +275,27 @@ sub ldapConnectBind {
     my $conn = ldapConnect();
   ldapBind($conn,1);
   return $conn;
+}
+
+sub ldapAdd {
+  my ($conn,$dn,%attrs) = @_;
+
+  my $entry = Net::LDAP::Entry->new($dn, %attrs);
+
+  if (!$notReally) {
+    my $resp = $conn->add($entry);
+    if ($resp->code) {
+      if ($continuous) {
+        print STDERR "Error adding $dn: ".$resp->error." (".$resp->code.")\n";
+      } else {
+        die("Error adding $dn: ".$resp->error." (".$resp->code.")\n");
+      }
+    }
+  } else {
+    print "Would add entry:";
+    print $entry->ldif;
+    print "\n";
+  }
 }
 
 sub ldapDisconnect {
