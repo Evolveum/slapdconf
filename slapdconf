@@ -40,17 +40,11 @@ my ($filename);
 
 my $debug = 0;
 
+my $defaultIndexes = [ 'objectClass eq', 'uid eq,sub', 'cn eq,sub', 'sn eq,sub', 'givenName eq,sub', 'mail eq,sub', 
+                        'member eq', ];
 # my $defaultTLSCipherSuite = "TLSv1+RSA:!EXPORT:!NULL"; # OpenSSL
 my $defaultTLSCipherSuite = "NORMAL"; # GnuTLS
 my %defaultOlcSuffix = (
-    'olcDbConfig' => [
-      "set_cachesize 0 2097152 0",
-      "set_lk_max_objects 1500",
-      "set_lk_max_locks 1500",
-      "set_lk_max_lockers 1500",
-    ],
-    'olcDbIndex' => [ 'objectClass eq' ],
-    'olcDbCheckpoint' => '512 30',
     'olcAccess' => [
       'to attrs=userPassword,shadowLastChange '.
         'by dn="%%%ROOT_DN%%%" write '.
@@ -74,6 +68,28 @@ my %defaultSyncprovOlcConfig = (
   'olcSpCheckpoint' => '100 10',
   'olcSpSessionlog' => '100',
 );
+
+my $databases = {
+  hdb => {
+    objectClass => "olcHdbConfig",
+    initialConfig => {
+      'olcDbConfig' => [
+        "set_cachesize 0 2097152 0",
+        "set_lk_max_objects 1500",
+        "set_lk_max_locks 1500",
+        "set_lk_max_lockers 1500",
+      ],
+      'olcDbIndex' => $defaultIndexes,
+      'olcDbCheckpoint' => '512 30',    
+    },
+  },
+  mdb => {
+    objectClass => "olcMdbConfig",
+    initialConfig => {
+      'olcDbIndex' => $defaultIndexes,
+    },
+  },
+};
 
 my @olcServerProps = qw(olcIdleTimeout olcLogLevel olcReferral olcTLSCACertificateFile olcTLSCertificateFile olcTLSCertificateKeyFile olcTLSCipherSuite);
 my @olcSuffixProps = qw(olcDatabase olcDbDirectory olcRootDN olcRootPW olcAccess olcDbConfig olcDbIndex);
@@ -419,9 +435,10 @@ sub createSuffix {
     $suffix = shift @ARGV;
   }
   
-  my ($dbDirectory,$rootDn,$rootPassword);
+  my ($dbDirectory,$dbType,$rootDn,$rootPassword);
   GetOptions (
     "dbDir|B=s" => \$dbDirectory,
+    "dbType=s" => \$dbType,
     "rootDn=s" => \$rootDn,
     "rootPassword=s" => \$rootPassword,
     ) or usage();
@@ -435,7 +452,13 @@ sub createSuffix {
   $dbDirectory = "/var/lib/ldap" unless $dbDirectory;
   $rootDn = "cn=admin,".$suffix unless $rootDn;
   $rootPassword = "secret" unless $rootPassword;
-    
+  $dbType = "hdb" unless $dbType;
+  
+  my $dbconf = $databases->{$dbType};
+  if (!$dbconf) {
+    die("Unknown database type $dbType\n");
+  }
+  
   my $conn = ldapConnectBind();
   
   my $entry = getConfigObjectBySuffix($conn,$suffix,0);
@@ -457,16 +480,14 @@ sub createSuffix {
             ", suffix ".$resp->entry(0)->get_value('olcSuffix')."\n");
   }
   
-  $entry = Net::LDAP::Entry->new("olcDatabase=hdb,cn=config",
-    'objectClass' => ['olcDatabaseConfig','olcHdbConfig'],
-    'olcDatabase' => 'hdb',
+  $entry = Net::LDAP::Entry->new("olcDatabase=$dbType,cn=config",
+    'objectClass' => ['olcDatabaseConfig', $dbconf->{objectClass}],
+    'olcDatabase' => $dbType,
     'olcSuffix' => $suffix,
     'olcDbDirectory' => $dbDirectory,
     'olcRootDN' => $rootDn,
     'olcRootPW' => hashPassword($rootPassword),
-    'olcDbConfig' => $defaultOlcSuffix{olcDbConfig},
-    'olcDbIndex' => $defaultOlcSuffix{olcDbIndex},
-    'olcDbCheckpoint' => $defaultOlcSuffix{olcDbCheckpoint},
+    %{$dbconf->{initialConfig}},
     'olcAccess' => replaceAdmin($rootDn, $defaultOlcSuffix{olcAccess}),
   );
   
