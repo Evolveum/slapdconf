@@ -54,6 +54,7 @@ my $notReally = 0;
 my $continuous = 0;
 my $initialize = 0;
 my $quiet = 0;
+my $startIndex = 0;
 my $displayCountAfter = 100;
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 my @consonants = (qw(b c d f g h j k l m n p r s t v w x z));
@@ -75,6 +76,7 @@ GetOptions (
   "saslMechanism|Y=s" => \$bindSaslMechanism,
   "suffix|s=s" => \$suffix,
   "init|i" => \$initialize,
+  "startIndex=i" => \$startIndex,
   "notReally|n" => \$notReally,
   "continuous|c" => \$continuous,
   "quiet|q" => \$quiet,
@@ -147,16 +149,17 @@ sub generateEntries {
 
   my $startTime = time();
   my $entryNum = 0;
+  my $entryIndex = $startIndex;
   for (; $entryNum < $numEntries; $entryNum++) {
 
-    my $name = sprintf($defaultNameFormat, $entryNum);
+    my $name = sprintf($defaultNameFormat, $entryIndex);
     my $readableName;
     my %personAttrs = ();
     if (!$noPersonAttrs) {
       my $sn = randomName();
       my $givenName = randomName();
-      my $cn = sprintf("%s %s (%08d)", $givenName, $sn, $entryNum);
-      my $password = sprintf($defaultPasswordFormat, $entryNum);
+      my $cn = sprintf("%s %s (%08d)", $givenName, $sn, $entryIndex);
+      my $password = sprintf($defaultPasswordFormat, $entryIndex);
       %personAttrs = (
         'cn' => $cn,
         'sn' => $sn,
@@ -174,7 +177,7 @@ sub generateEntries {
     );
 
     if ($verbose) {
-      print "Adding entry $entryNum: $dn"; 
+      print "Adding entry $entryIndex: $dn"; 
       print " ($readableName)" if $readableName;
       print "\n";
     }
@@ -190,8 +193,9 @@ sub generateEntries {
          $rate = $entryNum/$durSec;
       }
       my $etaEnd = localtime($startTime + $etaSec);
-      print "Added $entryNum entries in $durSec seconds ($rate entries per second). ETA in $etaSec sec ($etaEnd)\n";
+      print "$entryIndex: Added $entryNum entries in $durSec seconds ($rate entries per second). ETA in $etaSec sec ($etaEnd)\n";
     }
+    $entryIndex++;
   }
   
   my $stopTime = time();
