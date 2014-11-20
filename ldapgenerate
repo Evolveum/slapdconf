@@ -192,7 +192,7 @@ sub generateEntries {
       if ($durSec != 0) {
          $rate = $entryNum/$durSec;
       }
-      my $etaEnd = localtime($startTime + $etaSec);
+      my $etaEnd = localtime($nowTime + $etaSec);
       print "$entryIndex: Added $entryNum entries in $durSec seconds ($rate entries per second). ETA in $etaSec sec ($etaEnd)\n";
     }
     $entryIndex++;

@@ -122,6 +122,7 @@ sub run {
         return $entry;
       }
     );
+
   } elsif ($test eq "searchUid") {
     runTest($conn,"search by uid",
       sub {
@@ -136,6 +137,26 @@ sub run {
         return $entry;
       }
     );
+
+  } elsif ($test eq "searchCnSubstr") {
+    runTest($conn,"substring search by cn",
+      sub {
+        my $index = int(rand($numEntries));
+        my $substr = sprintf("%07d", $index/10);
+        my $dn = "$peopleContainer,$suffix";
+        my $resp = ldapSeach($conn,
+          base => $dn,
+          filter => "(cn=*$substr*)",
+          scope => "sub",
+        );
+        if ($resp->count < 10 || $resp->count > 11) {
+          print STDERR "Got ".$resp->count.", expected 10 or 11: ".$substr."\n";
+          return undef;
+        }
+        return $resp;
+      }
+    );
+
   } else {
     die("Unknown test $test\n");
   }
@@ -171,7 +192,7 @@ sub runTest {
       if ($durSec != 0) {
          $rate = $try/$durSec;
       }
-      my $etaEnd = localtime($startTime + $etaSec);
+      my $etaEnd = localtime($nowTime + $etaSec);
       print "$try ops in $durSec seconds ($rate ops per second). ETA in $etaSec sec ($etaEnd)\n";
     }
   }

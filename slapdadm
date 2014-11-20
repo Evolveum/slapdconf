@@ -28,7 +28,7 @@ use UUID;
 use Getopt::Long qw(:config bundling no_auto_abbrev pass_through);
 use Pod::Usage;
 
-my @userDbTypes = qw(hdb bdb);
+my @userDbTypes = qw(hdb bdb mdb);
 
 my ($verbose,$optHelp,$optYes,$optRc,$optDoNothing);
 my ($configDir,$dbDir,$serviceName,$ldapUser,$ldapGroup);
@@ -257,6 +257,7 @@ sub deleteDbAndConfigFiles {
 
   stopSlapd();
 
+  #print("C: $cnConfigDir\n");
   my (@cnConfigNodes) = listDir($cnConfigDir);
   #print("N: ".join(", ",@cnConfigNodes)."\n");
   my @dbNodes = grep { /^olcDatabase=/ } @cnConfigNodes;
@@ -264,7 +265,7 @@ sub deleteDbAndConfigFiles {
   my @deletedNodeNames;
   OUTER: foreach my $dbNode (@dbNodes) {
     if (my ($num,$name) = ($dbNode =~ /^olcDatabase=\{(-?\d+)\}([^\s\.]+)(\.ldif)?$/)) {
-  #    print ("$num - $name\n");
+      #print ("$num - $name\n");
       if ($num < 1) {
         print("Skipping DB $name because num is $num\n") if $verbose;
         next;
