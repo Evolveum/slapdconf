@@ -25,6 +25,9 @@ use warnings;
 use Net::LDAP;
 use Net::LDAP::LDIF;
 use Net::LDAP::Util qw(ldap_explode_dn);
+use Net::LDAP::Control::VLV;
+use Net::LDAP::Control::Sort;
+use Net::LDAP::Constant qw( LDAP_CONTROL_VLVRESPONSE );
 use Authen::SASL;
 use Digest::SHA qw(sha1);
 use MIME::Base64;
@@ -157,11 +160,49 @@ sub run {
       }
     );
 
+  } elsif ($test eq "searchUidVlv") {
+    vlvSearch($conn, 'uid', 9);
+
+  } elsif ($test eq "searchCnVlv") {
+    vlvSearch($conn, 'cn', 9);
+
   } else {
     die("Unknown test $test\n");
   }
 
   ldapDisconnect($conn);
+}
+
+sub vlvSearch {
+  my ($conn, $sortAttr, $after) = @_;
+  my $vlv  = Net::LDAP::Control::VLV->new(
+     before  => 0,
+     after   => $after,
+     content => 0,
+     offset  => 1,
+   );
+  my $sort = Net::LDAP::Control::Sort->new( order => 'uid:2.5.13.3' );
+  my $dn = "$peopleContainer,$suffix";
+  
+  runTest($conn,"VLV search by ".$sortAttr,
+    sub {
+      my $index = int(rand($numEntries));
+      $vlv->offset($index);
+      my $resp = ldapSeach($conn,
+        base => $dn,
+        filter => "(objectclass=inetorgperson)",
+        scope => "sub",
+        control => [ $sort, $vlv],
+      );
+      if ($resp->count < 1 || $resp->count > $after + 1) {
+        print STDERR "Got ".$resp->count.", expected max ".($after+1).": ".$index."\n";
+        return undef;
+      }
+      my $vlvresp = $resp->control( LDAP_CONTROL_VLVRESPONSE ) or die;
+      $vlv->response($vlvresp);
+      return $resp;
+    }
+  );
 }
 
 sub runTest {
