@@ -55,6 +55,8 @@ my $continuous = 0;
 my $initialize = 0;
 my $quiet = 0;
 my $startIndex = 0;
+my $passwordHash = 'SSHA';
+my $outFilename;
 my $displayCountAfter = 100;
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 my @consonants = (qw(b c d f g h j k l m n p r s t v w x z));
@@ -77,6 +79,8 @@ GetOptions (
   "suffix|s=s" => \$suffix,
   "init|i" => \$initialize,
   "startIndex=i" => \$startIndex,
+  "passwordHash=s" => \$passwordHash,
+  "file|f=s" => \$outFilename,
   "notReally|n" => \$notReally,
   "continuous|c" => \$continuous,
   "quiet|q" => \$quiet,
@@ -201,7 +205,12 @@ sub generateEntries {
   my $stopTime = time();
   my $durSec = $stopTime - $startTime;
   if (!$quiet) {
-    my $rate = $entryNum/$durSec;
+    my $rate;
+    if ($durSec) {
+      $rate = $entryNum/$durSec;
+    } else {
+      $rate = "more than ".$entryNum;
+    }
     print "Added $entryNum entries in $durSec seconds ($rate entries per second).\n";
   }
   
@@ -225,9 +234,16 @@ sub randomName {
 
 sub hashPassword {
   my ($clearPassword) = @_;
-  my $salt = generateSalt();
-  my $hash = "{SSHA}".encode_base64(sha1($clearPassword.$salt).$salt, "");
-  return $hash;
+  
+  if (!$passwordHash || uc($passwordHash) eq 'NONE') {
+    return $clearPassword;
+  } elsif (uc($passwordHash) eq 'SSHA') {
+    my $salt = generateSalt();
+    my $hash = "{SSHA}".encode_base64(sha1($clearPassword.$salt).$salt, "");
+    return $hash;
+  } else {
+    die ("Unknown password hash algorithm '$passwordHash'\n");
+  }
 }
 
 sub generateSalt {
@@ -276,7 +292,12 @@ sub ldapBind {
 }
 
 sub ldapConnectBind {
-    my $conn = ldapConnect();
+  if ($outFilename) {
+    open my $outFile, '>', $outFilename or die("Cannot open output file $outFilename: $!\n");
+    return $outFile;
+  }
+  
+  my $conn = ldapConnect();
   ldapBind($conn,1);
   return $conn;
 }
@@ -285,6 +306,11 @@ sub ldapAdd {
   my ($conn,$dn,%attrs) = @_;
 
   my $entry = Net::LDAP::Entry->new($dn, %attrs);
+
+  if ($outFilename) {
+    print $conn $entry->ldif();
+    return;
+  }
 
   if (!$notReally) {
     my $resp = $conn->add($entry);
@@ -304,6 +330,11 @@ sub ldapAdd {
 
 sub ldapDisconnect {
   my ($conn) = @_;
+  
+  if ($outFilename) {
+    close $conn;
+    return;
+  }
   
   my $resp = $conn->unbind;
   if ($resp->code) {
