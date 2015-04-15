@@ -1,0 +1,13 @@
+dn: uid=jack,ou=people,dc=example,dc=com
+objectclass: piracyPerson
+objectclass: inetOrgPerson
+objectclass: organizationalPerson
+objectclass: person
+uid: jack
+givenName: Jack
+sn: Sparrow
+cn: cpt. Jack Sparrow
+description: A mighty pirate, the mightiest pirate sailing the seven seas.
+mail: jack@blackpearl.com
+piracyNickname: Jack
+piracyShipName: Black Pearl

@@ -1,0 +1,168 @@
+dn: cn=schema
+objectClass: top
+objectClass: ldapSubentry
+objectClass: subschema
+cn: schema
+# Piracy LDAP Schema Example
+# 
+# Copyright (c) 2011-2015 Radovan Semancik
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#----------------------------------------------------------------------
+# Attributes
+#----------------------------------------------------------------------
+#
+# All attribute values conform exatly to LDAP schema definition unless
+# specified otherwise. For example, all Strings with directory string
+# syntax may have national characters (any valid unicode codepoint), may
+# contain spaces, etc. - unless that is explicitly constrained by
+# comments in this schema definition.
+#
+# Case sensitivity is determined by EQUALITY matching rule (unless 
+# explicitly specified otherwise).
+#
+# piracyShipName
+#
+# Description:
+#	The name of thar vessel
+#
+# Format: String
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.1 NAME 'piracyShipName' DESC 'The name of thar vessel' EQUALITY caseExactMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15  X-ORIGIN 'user defined' )
+# piracyStatus
+#
+# Description:
+#	Current whereabouts of a pirate.
+#
+# Format: Choose one from:
+#		alive
+#		dead
+#		undead
+#		drunk
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.2 NAME 'piracyStatus' DESC 'Current whereabouts of a pirate.' EQUALITY caseExactIA5Match SINGLE-VALUE SYNTAX 1.3.6.1.4.1.1466.115.121.1.26  X-ORIGIN 'user defined' )
+# piracyScarNumber
+#
+# Description:
+#	The number of pirate's scars.
+#
+# Format: Integer 
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.3 NAME 'piracyScarNumber' DESC 'The number of pirate's scars.' EQUALITY integerMatch ORDERING integerOrderingMatch SINGLE-VALUE SYNTAX 1.3.6.1.4.1.1466.115.121.1.27  X-ORIGIN 'user defined' )
+# piracyCaptainship
+#
+# Description:
+#	Whether the pirate honors himself with a capitain title.
+#
+# Format: Boolean encoded as string
+#	  	"0", "false": not a captain
+#		"1", "true": is a captain
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.4 NAME 'piracyCaptainship' DESC 'Whether the pirate honors himself with a capitain title.' SINGLE-VALUE SUP name  X-ORIGIN 'user defined' )
+# piracyEnrollmentTimestamp
+#
+# Description:
+#	The date and time of a pirate stopping to be a landluber and becomming
+#	a mighty pirate.
+#
+# Format: generalized time (absolute timestamp) in UTC
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.5 NAME 'piracyEnrollmentTimestamp' DESC 'Piratical enrollment date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SINGLE-VALUE SYNTAX 1.3.6.1.4.1.1466.115.121.1.24  X-ORIGIN 'user defined' )
+# piracyTreasureSecret
+#
+# Description:
+#	A secret code that a pirate keeps for tharself.
+#
+# Format: OctetString (binary)
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.6 NAME 'piracyTreasureSecret' DESC 'A secret code that a pirate keeps for tharself.' EQUALITY octetStringMatch SINGLE-VALUE SYNTAX 1.3.6.1.4.1.1466.115.121.1.40  X-ORIGIN 'user defined' )
+# piracyNickname
+#
+# Description:
+#	A piratical name that pirate's maties will call the pirate.
+#	Thar might be many such names.
+#
+# Format: String (Multivalued)
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.7 NAME 'piracyNickname' DESC 'Piratical nickname' SUP name  X-ORIGIN 'user defined' )
+# piracyBestWeapon
+#
+# Description:
+#	A weapon that the pirate likes the most.
+#	Thar might be many such weapons.
+#
+# Format: String (Multivalued)
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.8 NAME 'piracyBestWeapon' DESC 'Pirates best weapon' SUP name  X-ORIGIN 'user defined' )
+# piracyQuote
+#
+# Description:
+#	The most infamous words a pirate has ever uttered.
+#
+# Format: String
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.9 NAME 'piracyQuote' DESC 'Pirates most infamous quote' SINGLE-VALUE SUP name  X-ORIGIN 'user defined' )
+# piracyDrink
+#
+# Description:
+#	The most lovely drink of a pirate. Might that be a rum or grog or there
+#	might be many such drinks.
+#
+# Format: String
+#
+attributeTypes: ( 1.3.6.1.4.1.23611.4.1.2.10 NAME 'piracyDrink' DESC 'Pirates best drink' SUP name  X-ORIGIN 'user defined' )
+#----------------------------------------------------------------------
+# Object Classes
+#----------------------------------------------------------------------
+#
+# piracyPerson
+#
+# Descripton:
+#      Piratical person also known as a Pirate. Arr!
+#
+# Naming Attribute: uid
+#
+# Important Attributes:
+#	uid(from inetOrgPerson): User name (login name) of a pirate. Uid is
+#		considered immutable and must be unique for all pirates.
+#		Uid is considered to be case insensitive.
+#		Uid must not contain national characters and white characters 
+#		(e.g. spaces).
+#		Even though this attribute is defined as multivalued by LDAP,
+#		it must contain at most a SINGLE VALUE when using this schema.
+#	cn(from person): Full name of a pirate. Chosen by the pirate. Must be
+#		printable. This is how the pirate wants to formally be called by his maties.
+#		Even though this attribute is defined as multivalued by LDAP, it must contain at most a
+#		SINGLE VALUE when using this schema.
+#	sn(from person): Last name (surname) of a Pirate. Usually from a family,
+#		if such a family is worth being mentioned in a piratical person's name.
+#		Even though this attribute is defined as multivalued by LDAP, it must contain at most a
+#		SINGLE VALUE when using this schema.
+#	givenName(from person):First name (given name) of a pirate. Usually a name
+#		given to a pirate at birth, unless it is changed later.
+#		Even though this attribute is defined as multivalued by LDAP, it must contain at most a
+#		SINGLE VALUE when using this schema.
+#	telephoneNumber: Pirate's devilish parrot number. Should in inter-piratical format
+#		without the leading evil sign of "+".
+#		Even though this attribute is defined as multivalued by LDAP, it must contain at most a
+#		SINGLE VALUE when using this schema.
+#	piracyShipName: Name of the pirate's vessel. Unless sunk.
+#	piracyStatus: Current whereabouts of a pirate. See the attribute scroll for
+#		more details.
+#	piracyScarNumber: The number of pirate's scars.
+#
+objectClasses: ( 1.3.6.1.4.1.23611.4.1.1.1 NAME 'piracyPerson' DESC 'Piratical person. A pirate. Mighty pirate.' SUP inetOrgPerson STRUCTURAL MAY ( piracyShipName $ piracyStatus $ piracyScarNumber $ piracyCaptainship $ piracyEnrollmentTimestamp $ piracyTreasureSecret $ piracyNickname $ piracyBestWeapon $ piracyQuote $ piracyDrink )  X-ORIGIN 'user defined' )
+#----------------------------------------------------------------------
+# End of PiracyExample schema 
+#----------------------------------------------------------------------

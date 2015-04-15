@@ -1,0 +1,199 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2010-2015 Radovan Semancik
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# delschema
+# -----------
+# A tool to delete a custom schema or parts of the schema from LDAP server
+# 
+
+use strict;
+use Net::LDAP;
+use Data::Dumper;
+
+my $verbose = 0;
+my $hostname = "localhost";
+my $port = "389";
+my $schemaDn = "cn=schema";
+my $pattern = undef;
+my $bindDn = undef;
+my $bindPassword = undef;
+
+# ===[ Command-line processing ]==================================
+
+while (@ARGV) {
+
+  my $param = shift @ARGV;
+  
+  if (substr($param,0,1) eq '-') {
+  
+    if ($param eq '-h') {
+      usage();
+      exit(0);
+
+    } elsif ($param eq '-v') {
+      $verbose++;
+
+    } elsif ($param eq '-h') {
+      $hostname = shift @ARGV;
+      
+      if (!defined($hostname)) {
+        print STDERR "Missing value for the -h switch\n";
+        usage();
+        exit(-1);
+      }
+
+    } elsif ($param eq '-p') {
+      $port = shift @ARGV;
+      
+      if (!defined($port)) {
+        print STDERR "Missing value for the -p switch\n";
+        usage();
+        exit(-1);
+      }
+
+    } elsif ($param eq '-D') {
+      $bindDn = shift @ARGV;
+      
+      if (!defined($bindDn)) {
+        print STDERR "Missing value for the -D switch\n";
+        usage();
+        exit(-1);
+      }
+
+    } elsif ($param eq '-w') {
+      $bindPassword = shift @ARGV;
+      
+      if (!defined($bindPassword)) {
+        print STDERR "Missing value for the -w switch\n";
+        usage();
+        exit(-1);
+      }
+
+    } else {
+      print STDERR "Unknown switch $param\n";
+      usage();
+      exit(-1);
+    }
+  } else {
+    unshift(@ARGV,$param);
+    last;
+  }
+
+}
+
+if ($verbose > 1) {
+  # Print configuration
+  
+  print "CONFIGURATION:\n";
+  print "  verbose: $verbose\n";
+  print "  hostname: $hostname\n";
+  print "  port: $port\n";
+  print "\n";
+  
+}
+
+# ===[ MAIN Part of the Script ]==================================
+
+print "Starting script ...\n" if $verbose;
+print "Command line after pocessing the switches: @ARGV\n" if ($verbose > 1);
+
+my $ldap = Net::LDAP->new( $hostname,
+                           port => $port,
+                         ) or die "$@";
+
+print "Connected to $hostname:$port\n" if ($verbose > 1);
+
+
+if (defined($bindDn)) {
+  my $mesg = $ldap->bind($bindDn, password => $bindPassword);
+  if ($mesg->code) { die "Bind error: ".$mesg->error." (".$mesg->code.")"; };
+  print "Bound as $bindDn\n" if $verbose;
+} else {
+  print "Anonymous bind\n" if $verbose;
+}
+
+my $mesg = $ldap->search(base => $schemaDn,
+                         filter => "objectclass=*",
+                         scope => "base",
+                         attrs => ["objectClasses", "attributeTypes"]);
+
+if ($mesg->code) { die "Search error: ".$mesg->error." (".$mesg->code.")"; };
+                         
+my %toDelete = ();
+
+print "Found:\n" if $verbose;
+foreach my $entry ($mesg->entries) {
+  foreach my $attr ($entry->attributes) {
+    my @values = $entry->get_value($attr);
+    print "  $attr:".scalar(@values)."\n" if $verbose;
+    $toDelete{$attr} = [];
+    foreach my $value (@values) {
+      if (defined($pattern)) {
+        # TODO
+      } else {
+        if ($value =~ /X-ORIGIN 'user defined'/) {
+          print "$attr: $value\n" if ($verbose > 1);
+          push(@{$toDelete{$attr}},$value);
+        }
+      }
+    }
+  }
+}
+
+print Dumper(\%toDelete) if ($verbose > 2);
+
+if ($verbose) {
+  print "Going to delete:\n";
+  foreach my $attr (keys %toDelete) {
+    print "  $attr:".scalar(@{$toDelete{$attr}})."\n" if $verbose;
+  }
+}
+
+
+foreach my $attr (keys %toDelete) {
+  if (scalar(@{$toDelete{$attr}}) == 0 ) {
+    delete $toDelete{$attr};
+  }
+}
+
+if (%toDelete) {
+
+  $mesg = $ldap->modify($schemaDn,
+                        delete => \%toDelete,
+                       );
+  if ($mesg->code) { die "Modify error: ".$mesg->error." (".$mesg->code.")"; };
+
+  print "Deleted\n" if $verbose;
+  
+} else {
+  print "Nothing to delete\n" if $verbose;
+}
+
+print "Finishing script ...\n" if $verbose;
+
+# ===[ Display Usage Message ]==================================
+#
+# Displays script description with a short usage summary
+
+sub usage {
+  print "A tool to delete a custom schema or parts of the schema from LDAP server\n";
+  print "Usage: $0 [-h] [-v] [-v ...] [-s <seprator>] [<inputFile>]\n";
+  print "  -h         Help message\n";
+  print "  -v         Verbose operation\n";
+  print "               (use multiple times to increase verbosity)\n";
+  print "  -s <sep>   Set new value for separator\n";
+  print "If no input file is specified, standard input is used\n";
+}
