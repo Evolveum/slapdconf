@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2014 Evolveum
+# Copyright (c) 2014-2015 Evolveum
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ GetOptions (
   "do-nothing|n" => \$optDoNothing,
   "yes|y" => \$optYes,
   "verbose|v" => \$verbose,
+  "debug|d" => \$debug,
   "help|h" => \$optHelp,
   ) or usage();
 usage() if $optHelp;
@@ -69,6 +70,7 @@ if ($command eq "--help") { usage(); }
 if ($command eq "list-suffixes") { listSuffixes() }
 elsif ($command eq "delete-suffix") { deleteSuffix() }
 elsif ($command eq "create-suffix") { createSuffix() }
+elsif ($command eq "delete-schema") { deleteSchema() }
 elsif ($command eq "delete-all") { deleteAll() }
 elsif ($command eq "help") { usage() }
 else { usage() }
@@ -317,6 +319,48 @@ sub deleteDbAndConfigFiles {
   }
 }
 
+sub deleteSchema {
+  my $schemaName = shift @ARGV;
+  if (!$schemaName) {
+    die("No schema name specified\n");
+  }
+
+  checkConfigDirs();
+
+  stopSlapd();
+
+  my $schemaIndex = undef;
+  ($schemaName, $schemaIndex) = parseIndexedName($schemaName);
+  
+  print "schemaName=$schemaName, schemaIndex=$schemaIndex\n" if $debug;
+
+  my $file = undef;
+  my (@schemaNodes) = listDir($cnConfigDir."/cn=schema");
+  foreach my $schemaNode (@schemaNodes) {
+    if (my ($entryIndex, $entryName) = ($schemaNode =~ /^cn=\{(-?\d+)\}([^\s\.]+)(\.ldif)?$/)) {
+      if ($entryName eq $schemaName) {
+        if (defined $schemaIndex && $schemaIndex != $entryIndex) {
+          die("Schema $schemaName present, but it does have index $entryIndex and not $schemaIndex\n");
+        }
+        $file="$cnConfigDir/cn=schema/$schemaNode";
+        last;
+      }
+    }
+  }
+
+  if (!$file) {
+    die("Schema $schemaName does not exist\n");
+  }
+
+  print "Deleting $file\n" if $debug;
+  deleteFile($file);
+
+  startSlapd();
+  
+}
+
+
+
 ### RC
 
 sub stopSlapd {
@@ -338,6 +382,15 @@ sub startSlapd {
 }
 
 ### Util
+
+sub parseIndexedName {
+  my ($val) = @_;
+  if ($val =~ /^{(\d+)}/) {
+    return ($', $1);
+  } else {
+    return ($val, undef);
+  }
+}
 
 sub checkConfigDirs {
   if (! -d $configDir) {
