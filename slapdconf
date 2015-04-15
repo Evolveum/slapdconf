@@ -29,6 +29,8 @@ use Digest::SHA qw(sha1);
 use MIME::Base64;
 use Getopt::Long qw(:config bundling no_auto_abbrev pass_through);
 use Pod::Usage;
+use File::Basename;
+use IPC::Open3;
 use Data::Dumper;
 
 my ($verbose,$optHelp);
@@ -112,6 +114,7 @@ GetOptions (
   "saslMechanism|Y=s" => \$bindSaslMechanism,
   "file|f=s" => \$filename,
   "verbose|v" => \$verbose,
+  "debug|d" => \$debug,
   "help" => \$optHelp,
   ) or usage();
 usage() if $optHelp;
@@ -153,6 +156,9 @@ elsif ($command eq "get-suffix-prop") { getSuffixProp() }
 elsif ($command eq "set-suffix-prop") { setSuffixProp() }
 elsif ($command eq "get-suffix-acis") { getSuffixAcis() }
 elsif ($command eq "set-suffix-acis") { setSuffixAcis() }
+elsif ($command eq "list-schemas") { listSchemas() }
+elsif ($command eq "add-schema") { addSchema() }
+elsif ($command eq "delete-schema") { deleteSchema() }
 elsif ($command eq "list-suffix-overlays") { listSuffixOverlays() }
 elsif ($command eq "add-overlay") { addOverlay() }
 elsif ($command eq "get-overlay-prop") { getOverlayProp() }
@@ -565,6 +571,134 @@ sub getSuffixDns {
     }
   }
   return @suffixes;
+}
+
+
+##### Schema
+
+sub listSchemas {  
+  my $conn = ldapConnectBind();
+    
+  foreach my $entry (getSchemaEntries($conn)) {
+    print $entry->get_value("cn");
+    if ($verbose) {
+      my @attrTypes = $entry->get_value("olcAttributeTypes");
+      my @objectClasses = $entry->get_value("olcObjectClasses");
+      print (" (".scalar(@attrTypes)." attribute types, ".scalar(@objectClasses)." object classes)");
+    }
+    print "\n";
+  }
+  
+  ldapDisconnect($conn);  
+}
+
+sub addSchema {
+  my $schemaName = shift @ARGV;
+  my $schemaFilename = $filename;
+  print "schemaName=$schemaName, schemaFilename=$schemaFilename\n" if $debug;
+  my $schemaType = "schema";
+  if ($schemaFilename) {
+    my ($baseFileName, $dirs, $suffix) = fileparse($schemaFilename,".ldif",".schema");
+    $schemaType = substr($suffix,1);
+    if (!$schemaName) {
+      $schemaName = $baseFileName;
+    }
+  }
+  if (!$schemaName) {
+    die("Schema name not provided\n");
+  }
+  
+  my $schemaIndex = undef;
+  ($schemaName, $schemaIndex) = parseIndexedName($schemaName);
+  
+  print "schemaName=$schemaName, schemaIndex=$schemaIndex, schemaFilename=$schemaFilename, schemaType=$schemaType\n" if $debug;
+  
+  my $conn = ldapConnectBind();
+    
+  foreach my $entry (getSchemaEntries($conn)) {
+    my $entryCn = $entry->get_value("cn");
+    my ($entryName, $entryIndex) = parseIndexedName($entryCn);
+    if ($entryName eq $schemaName) {
+      ldapDisconnect($conn);
+      die("Schema $schemaName already present\n");
+    }
+    if ($schemaIndex && $schemaIndex eq $entryIndex) {
+      die("Index $schemaIndex already present (schema $entryName)\n");
+    }
+  }
+  
+  my $ldif;
+  if ($schemaType eq "schema") {
+    # need to convert to LDIF
+    $ldif = schema2ldif($schemaName, $schemaFilename);
+  } elsif ($schemaType eq "ldif") {
+    open(LDIF, $schemaFilename) or die("Cannot open $schemaFilename: $!\n");
+    while (<LDIF>) {
+      $ldif.=$_;
+    }
+    close(LDIF);
+  } else {
+    die ("Unknown schema type $schemaType\n");
+  }
+  
+  print ("LDIF:\n$ldif\n") if $debug;
+  
+  # TODO
+  
+  ldapDisconnect($conn);  
+}
+
+sub schema2ldif {
+  my ($schemaName, $fileName) = @_;
+  
+  my ($baseFileName, $path, $suffix) = fileparse($0);
+  my $schema2ldifCommand = $path . "/schema2ldif -m -s '$schemaName'";
+  
+  print ("schema2ldifCommand=$schema2ldifCommand") if $debug;    
+  
+  my $pid = open3(\*WRITE, \*READ,0, $schema2ldifCommand);
+  
+  if ($fileName) {
+    open(SCHEMA,$fileName) or die("Cannot open $fileName: $!\n");
+    while (<SCHEMA>) {
+      print WRITE $_;
+    }
+    close(SCHEMA);
+  } else {
+    while (<STDIN>) {
+      print WRITE $_;
+    }
+  }
+  close(WRITE);
+    
+  select(undef,undef,undef,.5);
+  
+  my $ldif = "";
+  while (<READ>) {
+    $ldif .= $_;
+  }
+  
+  waitpid($pid, 1);
+  return $ldif;
+}
+
+sub deleteSchema {
+  # TODO
+}
+
+sub parseIndexedName {
+  my ($val) = @_;
+  if ($val =~ /^{(\d+)}/) {
+    return ($', $1);
+  } else {
+    return ($val, undef);
+  }
+}
+
+sub getSchemaEntries {
+  my ($conn) = @_;
+  
+  return getConfigEntriesByObjectclass($conn,"cn=schema,cn=config","one","olcSchemaConfig");
 }
 
 

@@ -339,5 +339,5 @@ sub usage {
 	print STDERR "\t-m\t\tGenerate \"modify\" LDIF instead of \"static\"\n";
 	print STDERR "\t-s <name>\t\tGenerate OpenLDAP LDIF flavor\n";
 	print STDERR "\t-o <origin>\tSpecify X-ORIGIN to inject (default: user defined)\n";
-	print STDERR "(c) 2000-2011 Radovan Semancik (http://storm.alert.sk/)\n";
+	print STDERR "(c) 2000-2015 Radovan Semancik, Evolveum \n";
 }
