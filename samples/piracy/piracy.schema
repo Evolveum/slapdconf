@@ -81,7 +81,7 @@ attributetype ( PiracyAttributeType:2
 
 attributetype ( PiracyAttributeType:3
     NAME 'piracyScarNumber'
-    DESC 'The number of pirate's scars.'
+    DESC 'The number of pirates scars.'
     EQUALITY integerMatch
     ORDERING integerOrderingMatch
     SINGLE-VALUE

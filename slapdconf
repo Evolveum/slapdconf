@@ -598,8 +598,10 @@ sub addSchema {
   print "schemaName=$schemaName, schemaFilename=$schemaFilename\n" if $debug;
   my $schemaType = "schema";
   if ($schemaFilename) {
-    my ($baseFileName, $dirs, $suffix) = fileparse($schemaFilename,".ldif",".schema");
-    $schemaType = substr($suffix,1);
+    my ($baseFileName, $dirs, $suffix) = fileparse($schemaFilename,"ldif","schema");
+    print ("schemaFilename=$schemaFilename, baseFileName=$baseFileName, dirs=$dirs, suffix=$suffix\n") if $debug;
+    $baseFileName = substr($baseFileName,0,-1);
+    $schemaType = $suffix;
     if (!$schemaName) {
       $schemaName = $baseFileName;
     }
@@ -627,24 +629,27 @@ sub addSchema {
     }
   }
   
-  my $ldif;
+  my $entry;
   if ($schemaType eq "schema") {
     # need to convert to LDIF
-    $ldif = schema2ldif($schemaName, $schemaFilename);
+    $entry = schema2ldif($schemaName, $schemaFilename);
   } elsif ($schemaType eq "ldif") {
     open(LDIF, $schemaFilename) or die("Cannot open $schemaFilename: $!\n");
-    while (<LDIF>) {
-      $ldif.=$_;
-    }
-    close(LDIF);
+    $entry = parseLdifEntry(\*LDIF);
   } else {
     die ("Unknown schema type $schemaType\n");
   }
   
-  print ("LDIF:\n$ldif\n") if $debug;
+  print ("Adding entry:\n".$entry->ldif."\n") if $debug;
   
-  # TODO
+  my $resp = $conn->add($entry);
+  if ($resp->code) {
+    ldapDisconnect($conn);
+    die("Error adding schema entry: ".$resp->error." (".$resp->code.")\n");
+  }
   
+  print ("Added schema entry ".$entry->dn.", response code ".$resp->code."\n") if $debug;
+
   ldapDisconnect($conn);  
 }
 
@@ -654,9 +659,9 @@ sub schema2ldif {
   my ($baseFileName, $path, $suffix) = fileparse($0);
   my $schema2ldifCommand = $path . "/schema2ldif -m -s '$schemaName'";
   
-  print ("schema2ldifCommand=$schema2ldifCommand") if $debug;    
+  print ("schema2ldifCommand=$schema2ldifCommand\n") if $debug;    
   
-  my $pid = open3(\*WRITE, \*READ,0, $schema2ldifCommand);
+  my $pid = open3(\*WRITE, \*READ, \*ERR, $schema2ldifCommand);
   
   if ($fileName) {
     open(SCHEMA,$fileName) or die("Cannot open $fileName: $!\n");
@@ -673,27 +678,71 @@ sub schema2ldif {
     
   select(undef,undef,undef,.5);
   
-  my $ldif = "";
-  while (<READ>) {
-    $ldif .= $_;
+  my $entry = parseLdifEntry(\*READ);
+  
+  while(<ERR>) {
+    print STDERR;
   }
   
   waitpid($pid, 1);
-  return $ldif;
+  return $entry;
+}
+
+sub parseLdifEntry {
+  my ($fh) = @_;
+  
+  my $ldif = Net::LDAP::LDIF->new($fh);
+  my $entry;
+  while ( not $ldif->eof() ) {
+    if ( $ldif->error ( ) ) {
+      die("Error parsing LDIF: ".$ldif->error()."\n".$ldif->error_lines()."\n");
+     } else {
+      $entry = $ldif->read_entry();
+     }
+  }
+  $ldif->done ( );
+
+  return $entry;
 }
 
 sub deleteSchema {
-  # TODO
+  my $schemaName = shift @ARGV;
+  if (!$schemaName) {
+    die("Schema name not provided\n");
+  }
+  
+  my $schemaIndex = undef;
+  ($schemaName, $schemaIndex) = parseIndexedName($schemaName);
+  
+  print "schemaName=$schemaName, schemaIndex=$schemaIndex\n" if $debug;
+  
+  my $conn = ldapConnectBind();
+    
+  my $schemaEntry = undef;
+  foreach my $entry (getSchemaEntries($conn)) {
+    my $entryCn = $entry->get_value("cn");
+    my ($entryName, $entryIndex) = parseIndexedName($entryCn);
+    if ($entryName eq $schemaName) {
+      if (defined $schemaIndex && $schemaIndex != $entryIndex) {
+        ldapDisconnect($conn);
+        die("Schema $schemaName present, but it does have index $entryIndex and not $schemaIndex\n");
+      }
+      $schemaEntry = $entry;
+      last;
+    }
+  }
+  
+  if (!$schemaEntry) {
+    die("Schema $schemaName does not exist\n");
+  }
+  
+  print ("Deleting entry:\n".$schemaEntry->ldif."\n") if $debug;
+
+  ldapDelete($conn, $schemaEntry->dn);
+
+  ldapDisconnect($conn);  
 }
 
-sub parseIndexedName {
-  my ($val) = @_;
-  if ($val =~ /^{(\d+)}/) {
-    return ($', $1);
-  } else {
-    return ($val, undef);
-  }
-}
 
 sub getSchemaEntries {
   my ($conn) = @_;
@@ -1425,6 +1474,16 @@ sub hashPassword {
 sub generateSalt {
   return join('',map {$saltChars[rand(64)]} (1..4));
 }
+
+sub parseIndexedName {
+  my ($val) = @_;
+  if ($val =~ /^{(\d+)}/) {
+    return ($', $1);
+  } else {
+    return ($val, undef);
+  }
+}
+
 
 ####### LDAP functions
 
