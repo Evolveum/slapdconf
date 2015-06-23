@@ -774,6 +774,10 @@ sub addModule {
   
   my ($entry) = getConfigEntriesByObjectclass($conn,"cn=config","sub","olcModuleList");
   
+  if (!$entry) {
+    die("Cannot find module configuration entry (olcModuleList)");
+  }
+  
   if (! grep { $_ =~ /^(\{\d+\})?$module$/ } $entry->get_value("olcModuleload")) {
   
     ldapModify($conn,$entry->dn,
@@ -1506,18 +1510,24 @@ sub ldapBind {
   my $desc;
   if ($bindDn) {
     $desc = "$bindDn (simple bind)";
+    print "Binding to $bindDn with simple bind\n" if $verbose;
     $resp = $conn->bind($bindDn,
       password => $bindPassword,
     );
   } elsif ($bindSaslMechanism) {
     $desc = "(SASL $bindSaslMechanism)";
+    my $sasl = Authen::SASL->new(mechanism => $bindSaslMechanism);
+    my $saslArg = $sasl;
+    if ($bindSaslMechanism eq "EXTERNAL") {
+      $saslArg = $sasl->client_new('ldap', 'localhost');
+    }
+    print "Binding to $bindDn with SASL mechanism $bindSaslMechanism\n" if $verbose;
     $resp = $conn->bind($bindDn,
-      sasl => Authen::SASL->new(
-        mechanism => $bindSaslMechanism,
-      ),
+      sasl => $saslArg,
     );
   } else {
     $desc = "(anonymous bind)";
+    print "Binding as anonymous\n" if $verbose;
     $resp = $conn->bind();
   }
   if ($die && $resp->code) {
