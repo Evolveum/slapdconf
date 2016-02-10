@@ -196,7 +196,7 @@ sub setServerProp {
   
   my %replace = ();
   my %add = ();
-  parsePropVals(\@propvals, \%replace, \%add);
+  parsePropVals(\@propvals, \%replace, \%add, \@olcServerProps);
   
   ldapModify($conn,"cn=config",
     replace => \%replace,
@@ -206,7 +206,7 @@ sub setServerProp {
 }
 
 sub parsePropVals {
-  my ($propvals, $replace, $add) = @_;
+  my ($propvals, $replace, $add, $allowedValues) = @_;
 
   foreach my $propval (@$propvals) {
     my ($prop,$val) = ($propval =~ /^\s*(\+?[^:]+)\s*:\s*(.*)\s*$/);
@@ -223,22 +223,24 @@ sub parsePropVals {
     if ($propName eq 'olcRootPW') {
       $val = hashPassword($val);
     }
-    collectPropToHash($hash,$propName,$val);
+    collectPropToHash($hash,$propName,$val,$allowedValues);
   }
 #  print Dumper(\%add);
   
 }
 
 sub collectPropToHash {
-  my ($mods,$prop,$val) = @_;
-    if (!grep {$prop =~ /^$_$/} @olcSuffixProps) { die("Unknown property $prop\n"); }      
-    if (ref $mods->{$prop}) {
-      push @{$mods->{$prop}},$val;
-    } elsif ($mods->{$prop}) {
-      $mods->{$prop} = [ $mods->{$prop}, $val ];
-    } else {
-      $mods->{$prop} = $val;
-    }
+  my ($mods,$prop,$val,$allowedValues) = @_;
+  if ($allowedValues) {
+    if (!grep {$prop =~ /^$_$/} @$allowedValues) { die("Unknown property $prop\n"); }
+  }
+  if (ref $mods->{$prop}) {
+    push @{$mods->{$prop}},$val;
+  } elsif ($mods->{$prop}) {
+    $mods->{$prop} = [ $mods->{$prop}, $val ];
+  } else {
+    $mods->{$prop} = $val;
+  }
 }
 
 sub displayProp {
@@ -278,7 +280,7 @@ sub setSuffixProp {
   
   my %replace = ();
   my %add = ();
-  parsePropVals(\@propvals, \%replace, \%add);
+  parsePropVals(\@propvals, \%replace, \%add, \@olcSuffixProps);
   
   ldapModify($conn,$entry->dn,
     replace => \%replace,
