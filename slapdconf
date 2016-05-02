@@ -30,6 +30,7 @@ use MIME::Base64;
 use Getopt::Long qw(:config bundling no_auto_abbrev pass_through);
 use Pod::Usage;
 use File::Basename;
+use File::Temp;
 use IPC::Open3;
 use Data::Dumper;
 
@@ -141,38 +142,39 @@ if (!$bindDn && !$bindPassword && !$bindSaslMechanism) {
 
 print("DEBUG: $command: hostname: $hostname, port: $port\n") if $debug;
 
-if ($command eq "create-suffix") { createSuffix() }
-elsif ($command eq "delete-suffix") { deleteSuffix() }
-elsif ($command eq "root-dse") { rootDse() }
-elsif ($command eq "dump-configuration") { dumpConfiguration() }
+if ($command eq "root-dse") { rootDse() }
+elsif ($command eq "test") { testConnection() }
 elsif ($command eq "get-server-prop") { getServerProp() }
 elsif ($command eq "set-server-prop") { setServerProp() }
-elsif ($command eq "list-modules") { listModules() }
-elsif ($command eq "add-module") { addModule() }
-elsif ($command eq "delete-module") { deleteModule() }
+elsif ($command eq "get-log-level") { getLogLevel() }
+elsif ($command eq "set-log-level") { setLogLevel() }
+elsif ($command eq "dump-configuration") { dumpConfiguration() }
 elsif ($command eq "list-databases") { listDatabases() }
 elsif ($command eq "list-suffixes") { listSuffixes() }
+elsif ($command eq "create-suffix") { createSuffix() }
+elsif ($command eq "delete-suffix") { deleteSuffix() }
 elsif ($command eq "get-suffix-prop") { getSuffixProp() }
 elsif ($command eq "set-suffix-prop") { setSuffixProp() }
 elsif ($command eq "get-suffix-acis") { getSuffixAcis() }
 elsif ($command eq "set-suffix-acis") { setSuffixAcis() }
+elsif ($command eq "edit-suffix-acis") { editSuffixAcis() }
+elsif ($command eq "set-tls") { setTls() }
 elsif ($command eq "list-schemas") { listSchemas() }
 elsif ($command eq "add-schema") { addSchema() }
 elsif ($command eq "delete-schema") { deleteSchema() }
+elsif ($command eq "list-modules") { listModules() }
+elsif ($command eq "add-module") { addModule() }
+elsif ($command eq "delete-module") { deleteModule() }
 elsif ($command eq "list-suffix-overlays") { listSuffixOverlays() }
 elsif ($command eq "add-overlay") { addOverlay() }
 elsif ($command eq "get-overlay-prop") { getOverlayProp() }
 elsif ($command eq "set-overlay-prop") { setOverlayProp() }
-elsif ($command eq "get-log-level") { getLogLevel() }
-elsif ($command eq "set-log-level") { setLogLevel() }
-elsif ($command eq "set-tls") { setTls() }
 elsif ($command eq "enable-repl-provider") { enableReplProvider() }
 elsif ($command eq "disable-repl-provider") { disableReplProvider() }
 elsif ($command eq "get-repl-provider") { getReplProvider() }
 elsif ($command eq "enable-repl-consumer") { enableReplConsumer() }
 elsif ($command eq "disable-repl-consumer") { disableReplConsumer() }
 elsif ($command eq "get-repl-consumer") { getReplConsumer() }
-elsif ($command eq "test") { testConnection() }
 elsif ($command eq "help") { usage() }
 else { usage() }
 
@@ -293,15 +295,28 @@ sub getSuffixAcis {
   my $conn = ldapConnectBind();
   my $suffix = getSuffixArg($conn);
   
+  print join("\n", getSuffixAcisToList($conn, $suffix));
+  
+  ldapDisconnect($conn);  
+}
+
+sub getSuffixAcisToList {
+  my ($conn, $suffix) = @_;
+  
   my $entry = getConfigObjectBySuffix($conn,$suffix,1);
   $entry->dump if $verbose;
   my @acis = $entry->get_value('olcAccess');
-  for my $aci (@acis) {
-    $aci =~ s/^{\d+}//;
-    print $aci."\n";
+  @acis = sort { getOrdinal($a) <=> getOrdinal($b) } @acis;
+  map { s/^{\d+}// } @acis;
+  return @acis;
+}
+
+sub getOrdinal {
+  if ($_[0] =~ /^{(\d+)}/) {
+    return $1;
+  } else {
+    return 0;
   }
-  
-  ldapDisconnect($conn);  
 }
 
 sub setSuffixAcis {  
@@ -309,21 +324,54 @@ sub setSuffixAcis {
   my $suffix = getSuffixArg($conn);
   my @propvals = @ARGV;
   
-  my $entry = getConfigObjectBySuffix($conn,$suffix,1);
   my @acis;
   while (<>) {
     chomp;
     push @acis,$_;
   }
   
+  setSuffixAcisFromList($conn, $suffix, @acis);
+  
+  ldapDisconnect($conn);  
+}
+
+sub setSuffixAcisFromList {
+  my ($conn, $suffix, @acis) = @_;
+
+  my $entry = getConfigObjectBySuffix($conn,$suffix,1);
   ldapModify($conn,$entry->dn,
     replace => {
       olcAccess => \@acis
     },
   );
   
+}
+
+sub editSuffixAcis {
+  my $conn = ldapConnectBind();
+  my $suffix = getSuffixArg($conn);
+  
+  my @acis = getSuffixAcisToList($conn, $suffix);
+  my @newAcis = editLines(@acis);
+
+  if (@newAcis) {
+
+    @newAcis = grep { $_ !~ /^\s*$/ } @newAcis;
+    
+    if ($verbose) {  
+      print "Setting ACIs:\n";
+      print join("\n", @newAcis);
+    }
+
+    setSuffixAcisFromList($conn, $suffix, @newAcis);
+    
+  } else {
+    print "The editor output was empty. Not changing any ACIs\n";
+  }
+  
   ldapDisconnect($conn);  
 }
+
 
 sub getSuffixArg {
   my ($conn) = @_;
@@ -848,6 +896,7 @@ sub dumpConfiguration {
 
 sub rootDse {
   my $conn = ldapConnectBind();
+  my $arg = shift @ARGV || '';
   
   my $resp = $conn->search(
     base => "",
@@ -859,13 +908,16 @@ sub rootDse {
     die("Fetch root DSE: ERROR: ".$resp->error." (".$resp->code.")\n");
   }
   my $rootDseEntry = $resp->entry(0);
-  $rootDseEntry->dump if ($verbose);
-  
-  my $version = $rootDseEntry->get_value("supportedLDAPVersion");
-  print("LDAP version $version\n");
-  my @suffixes = $rootDseEntry->get_value("namingContexts");
-  print("Suffixes:\n");
-  foreach my $suffix (@suffixes) { print ("  $suffix\n") };
+  if ($arg eq '--raw') {
+    $rootDseEntry->dump;
+  } else {
+    $rootDseEntry->dump if ($verbose);
+    my $version = $rootDseEntry->get_value("supportedLDAPVersion");
+    print("LDAP version $version\n");
+    my @suffixes = $rootDseEntry->get_value("namingContexts");
+    print("Suffixes:\n");
+    foreach my $suffix (@suffixes) { print ("  $suffix\n") };
+  }
   
   ldapDisconnect($conn);  
 }
@@ -888,7 +940,11 @@ sub testConnection {
   }
   
   my $dseResp = testFetchEntry($conn,"","base","root DSE");
-  testFetchEntry($conn,"cn=schema","sub","schema");
+  my ($schemaDn) = $dseResp->entry->get_value('subschemaSubentry');
+  if (!$schemaDn) {
+    $schemaDn = "cn=schema";
+  }
+  testFetchEntry($conn,$schemaDn,"base","schema");
   testFetchEntry($conn,"cn=config","sub","configuration entry");
 
   # todo
@@ -1490,6 +1546,24 @@ sub parseIndexedName {
   }
 }
 
+sub editLines {
+  my (@lines) = @_;
+  
+  my $fh = new File::Temp();
+  my $fname = $fh->filename;
+  print $fh join("\n", @lines);
+  $fh->close();
+  my $editor = $ENV{EDITOR} || 'vi';
+  system($editor, $fname);
+  open $fh, '<', $fname or die "Can't open temp file: $!";
+  my @newLines;
+  while (<$fh>) {
+    chomp;
+    push @newLines, $_;
+  }
+  $fh->close();
+  return @newLines;
+}
 
 ####### LDAP functions
 
@@ -1612,7 +1686,7 @@ slapdconf [global options] command [command options]
 
 =over 8
 
-=item B<root-dse>
+=item B<root-dse> [ I<--raw> ]
 
 Show directory root DSE entry (entry with dn="").
 
@@ -1642,17 +1716,6 @@ Sets new server log level(s).
 
 Dumps a complete server configuration.
 
-=item B<list-modules>
-
-Lists modules that are enabled on the server.
-
-=item B<add-module> I<modulename>
-
-Adds specified module to server configuration
-
-=item B<delete-module> I<modulename>
-
-Deletes specified module from server configuration. (May not be supported by the server yet)
 
 =item B<list-databases>
 
@@ -1684,9 +1747,64 @@ If plus sign is specified before
 a property name then the value will be added to existing values. Otherwise
 the new value overwrites existing value.
 
+=item B<get-suffix-acis> I<suffix>
+
+Display ACIs configured for specified suffix
+
+=item B<set-suffix-acis> I<suffix> [ I<filename> ]
+
+Set suffix ACIs. The ACIs are read from STDIN or from the specified file. Each ACI should be provided on its own line.
+The 'olcAccess' attribute name should NOT be present. The operation replaces all ACIs previously defined for the suffix.
+This is the same format as produced by get-suffix-acis operation.
+
+=item B<edit-suffix-acis> I<suffix>
+
+Opens a text editor filled with the content of suffix ACIs. Lets user edit the ACIs and then replaces them on the server.
+
 =item B<set-tls> C<-cacert> I<ca-cartificate-file> C<-cert> I<server-certificate-file> C<-key> I<server-private-key-file>
 
 Applies configuration for TLS/SSL connection support.
+
+=item B<list-schemas>
+
+List the LDAP schemas that are applied to the server.
+
+=item B<add-schema> [ I<schemaName> ] [ -f I<filename> ]
+
+Load specified LDAP schema to the server. Both the OpenLDAP format
+(suffix *.schema) and LDIF format (suffix *.ldif) are supported.
+
+=item B<delete-schema> I<schemaName>
+
+Delete specified LDAP schema from the server.
+
+=item B<list-modules>
+
+Lists modules that are enabled on the server.
+
+=item B<add-module> I<modulename>
+
+Adds specified module to server configuration
+
+=item B<delete-module> I<modulename>
+
+Deletes specified module from server configuration. (May not be supported by the server yet)
+
+=item B<list-suffix-overlays> [ I<suffix> ]
+
+Lists overlays that are activated for the specified suffix.
+
+=item B<add-overlay> I<suffix> I<overlayName> I<overlayObjectClass> [ I<propname>:I<propvalue> ] ...
+
+Activates specified overlay for the specified suffix.
+
+=item B<get-overlay-prop> I<suffix> I<overlayName>
+
+Show overlay configuration parameters.
+
+=item B<set-overlay-prop> I<suffix> I<overlayName> I<propname>:I<propvalue>
+
+Set overlay configuration parameter.
 
 =item B<enable-repl-provider> I<suffix>
 
