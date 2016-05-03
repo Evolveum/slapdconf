@@ -17,7 +17,7 @@
 # Author: Radovan Semancik
 #
 # Required packages:
-#	Ubuntu: libnet-ldap-perl libauthen-sasl-perl
+#	Ubuntu: libnet-ldap-perl libauthen-sasl-perl perl-doc
 
 use strict;
 use warnings;
@@ -1725,11 +1725,12 @@ List databases configured on the server.
 
 List directory suffixes configured on the server.
 
-=item B<create-suffix> I<suffix>
+=item B<create-suffix> I<suffixDn> [ --dbDir | -B I<dbDirectory> ] [ --dbType I<dbType> ] [ --rootDn I<rootUserDn> ] [ --rootPassword I<rootUserPassword> ]
 
 Creates new directory suffix with an associated database.
 It will create empty database without any entry - even without a root entry. This needs to be populated.
-But it creates a default configuration for the suffix including root user and default ACLs.
+But it creates a default configuration for the suffix including root user and default ACLs. 
+Default root user: cn=admin,I<suffix>. Default root password: secret
 
 =item B<delete-suffix> I<suffix>
 
