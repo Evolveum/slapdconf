@@ -5,6 +5,29 @@ OpenLDAP configuration utilities.
 These utilities make configuration of OpenLDAP easier - especially after the 
 switch to the OLC-stype configuration which uses the cn=config LDAP suffix.
 
+Synopsis
+========
+
+$ sudo slapdconf list-suffixes
+dc=evolveum,dc=com
+dc=example,dc=com
+
+$ sudo slapdconf get-suffix-prop dc=example,dc=com
+olcDatabase : {2}mdb
+olcDbDirectory : /var/lib/ldap/example
+.... (shorted for clarity) ....
+
+$ sudo slapdconf set-server-prop idle-timeout:120
+
+$ sudo slapdconf get-server-prop
+olcIdleTimeout : 120
+olcLogLevel :
+  stats
+  stats2
+
+Description
+===========
+
 There are two utilities in this project:
 
 slapdconf - Command-line tool to configure a running OpenLDAP.
