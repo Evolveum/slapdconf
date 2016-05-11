@@ -222,6 +222,9 @@ sub parsePropVals {
       $propName = $prop;
       $hash = $replace;
     }
+    if ($propName !~ /^olc/) {
+      $propName = olcizeName($propName);
+    }
     if ($propName eq 'olcRootPW') {
       $val = hashPassword($val);
     }
@@ -229,6 +232,11 @@ sub parsePropVals {
   }
 #  print Dumper(\%add);
   
+}
+
+sub olcizeName {
+  my ($origName) = @_;
+  return "olc" . join('', map {ucfirst($_)} split('-',$origName));
 }
 
 sub collectPropToHash {
