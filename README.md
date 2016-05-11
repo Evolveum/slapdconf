@@ -8,6 +8,7 @@ switch to the OLC-stype configuration which uses the cn=config LDAP suffix.
 Synopsis
 ========
 
+```
 $ sudo slapdconf list-suffixes
 dc=evolveum,dc=com
 dc=example,dc=com
@@ -24,6 +25,7 @@ olcIdleTimeout : 120
 olcLogLevel :
   stats
   stats2
+```
 
 Description
 ===========
