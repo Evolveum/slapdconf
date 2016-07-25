@@ -99,6 +99,11 @@ my @olcSuffixProps = qw(olcDatabase olcDbDirectory olcRootDN olcRootPW olcAccess
 my @syncreplConfOrder = qw(rid provider type searchbase bindmethod binddn credentials);
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
 
+my %overlayObjectClasses = (
+  sssvlv => 'olcSssVlvConfig',
+  ppolicy => 'olcPPolicyConfig',
+  memberof => 'olcMemberOf',
+);
 $SIG{__DIE__} = sub { Carp::confess(@_) };
 
 my $command;
@@ -467,6 +472,9 @@ sub addOverlay {
     die("No overlay name specified\n");
   }
   my $overlayClass = shift @ARGV;
+  if (!$overlayClass) {
+    $overlayClass = $overlayObjectClasses{$overlayName};
+  }
   if (!$overlayClass) {
     die("No overlay objectClass specified\n");
   }
@@ -1641,6 +1649,12 @@ sub ldapAdd {
   my ($conn,$dn,%attrs) = @_;
 
   my $entry = Net::LDAP::Entry->new($dn, %attrs);
+  
+  if ($verbose) {
+    print "Adding entry:\n";
+    $entry->dump;
+  }
+  
   my $resp = $conn->add($entry);
   if ($resp->code) {
     die("Error adding $dn: ".$resp->error." (".$resp->code.")\n");
