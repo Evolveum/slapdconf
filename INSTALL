@@ -1,0 +1,17 @@
+SLAPDCONF INSTALLATION
+----------------------
+
+slapdconf is a set of Perl scripts. Unfortunatelly currently there are no
+packages for any Linux distribution (help with packaging is highly
+appreciated). Therefore simply copy the scripts to /usr/local/bin or
+/usr/local/sbin. You will also need Perl libraries that these scrips 
+depend on:
+
+Net::LDAP
+Authen::SASL
+UUID
+and perldoc
+
+In debian/ubuntu you can install those libraries by running:
+
+sudo apt-get install libnet-ldap-perl libauthen-sasl-perl libuuid-perl perl-doc
