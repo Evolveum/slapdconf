@@ -38,7 +38,7 @@ slapdadm  - Command-line tool to configure stopped OpenLDAP.
 slapdconf
 =========
 
-This command-line tool is used to configure a runnint OpenLDAP server instance.
+This command-line tool is used to configure a running OpenLDAP server instance.
 It uses LDAP protocol to change the cn=config subtree of an OpenLDAP server.
 The configuration changes are applied without a server restart.
 
