@@ -369,7 +369,7 @@ sub stopSlapd {
   } else {
     my $out = `service $serviceName status`;
     chomp($out);
-    if ($out !~ /is not running/i) {
+    if ($out !~ /inactive/i) {
       die("slapd seems to be running ($out)\n");
     }
   }
