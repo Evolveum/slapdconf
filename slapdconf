@@ -94,7 +94,7 @@ my $databases = {
   },
 };
 
-my @olcServerProps = qw(olcIdleTimeout olcLogLevel olcReferral olcTLSCACertificateFile olcTLSCertificateFile olcTLSCertificateKeyFile olcTLSCipherSuite olcSizeLimit);
+my @olcServerProps = qw(olcIdleTimeout olcLogLevel olcReferral olcTLSCACertificateFile olcTLSCertificateFile olcTLSCertificateKeyFile olcTLSCipherSuite olcSizeLimit olcServerID);
 my @olcSuffixProps = qw(olcDatabase olcDbDirectory olcRootDN olcRootPW olcAccess olcLimits olcDb.*);
 my @syncreplConfOrder = qw(rid provider type searchbase bindmethod binddn credentials);
 my @saltChars = ('.','/',0..9,'A'..'Z','a'..'z');
