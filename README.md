@@ -5,6 +5,13 @@ OpenLDAP configuration utilities.
 These utilities make configuration of OpenLDAP easier - especially after the 
 switch to the OLC-stype configuration which uses the cn=config LDAP suffix.
 
+DISCONTINUED
+============
+
+THIS PROJECT IS DISCONTINUED.
+It is no longer actively maintained and there are no further plans to maintain it in the future.
+This source code repository is provided for historic (archival) reasons only.
+
 Synopsis
 ========
 
@@ -75,11 +82,9 @@ slapdadm delete-all
 Notes
 =====
 
-This is work in progress. Some commands are not yet implemented or implemented partially. Any kind of
-contribution to make these tools a more complete solution is greatly appreciated. The primary source
-code repository for these tools is at Github:
-
-[https://github.com/Evolveum/slapdconf]
+THIS PROJECT IS DISCONTINUED.
+It is no longer actively maintained and there are no further plans to maintain it in the future.
+This source code repository is provided for historic (archival) reasons only.
 
 The tools are written in Perl. The slapdconf uses Net::LDAP module which is easy to use LDAP client.
 The Perl was chosen because of its flexibility. It also looks like it is kind of a tradition to use
